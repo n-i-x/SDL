@@ -130,6 +130,7 @@ struct SDL_Window
 struct SDL_VideoDisplay
 {
     char *name;
+    SDL_bool rotated;
     int max_display_modes;
     int num_display_modes;
     SDL_DisplayMode *display_modes;

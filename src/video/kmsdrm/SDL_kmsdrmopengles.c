@@ -20,6 +20,8 @@
 */
 
 #include "../../SDL_internal.h"
+#include "../../../include/rga/include/RgaUtils.h"
+#include "../../../include/im2d/include/im2d.h"
 
 #ifdef SDL_VIDEO_DRIVER_KMSDRM
 
@@ -30,10 +32,14 @@
 #include "SDL_kmsdrmopengles.h"
 #include "SDL_kmsdrmdyn.h"
 #include <errno.h>
+#include <stdbool.h>
 
 #ifndef EGL_PLATFORM_GBM_MESA
 #define EGL_PLATFORM_GBM_MESA 0x31D7
 #endif
+
+extern rga_info_t src_info;
+extern rga_info_t dst_info;
 
 /* EGL implementation of SDL OpenGL support */
 
@@ -93,6 +99,7 @@ int KMSDRM_GLES_SwapWindow(_THIS, SDL_Window *window)
     SDL_VideoData *viddata = ((SDL_VideoData *)_this->driverdata);
     KMSDRM_FBInfo *fb_info;
     int ret = 0;
+    struct gbm_bo* rga_buffer = NULL; 
 
     /* Always wait for the previous issued flip before issuing a new one,
        even if you do async flips. */
@@ -143,11 +150,49 @@ int KMSDRM_GLES_SwapWindow(_THIS, SDL_Window *window)
     }
 
     /* Get an actual usable fb for the next front buffer. */
-    fb_info = KMSDRM_FBFromBO(_this, windata->next_bo);
+    if (src_info.fd) {
+        close(src_info.fd);
+    }
+    src_info.fd = KMSDRM_gbm_bo_get_fd(windata->next_bo);
+    dst_info.fd = viddata->rga_buffer_prime_fds[viddata->rga_buffer_index];
+
+    rga_buffer_t src_img, dst_img;
+    rga_buffer_handle_t src_handle, dst_handle;
+    im_handle_param_t src_param, dst_param;
+
+    src_param.width = src_info.rect.width;
+    src_param.height = src_info.rect.height;
+    src_param.format = src_info.rect.format;
+
+    dst_param.width = dst_info.rect.width;
+    dst_param.height = dst_info.rect.height;
+    dst_param.format = dst_info.rect.format;
+
+    src_handle = importbuffer_fd(src_info.fd, &src_param);
+    dst_handle = importbuffer_fd(dst_info.fd, &dst_param);
+
+    src_img = wrapbuffer_handle(src_handle, src_info.rect.width , src_info.rect.height, src_info.rect.format);
+    dst_img = wrapbuffer_handle(dst_handle, dst_info.rect.width , dst_info.rect.height, dst_info.rect.format);
+    ret = imrotate(src_img, dst_img, IM_HAL_TRANSFORM_ROT_90);
+
+    /* Check for rotation errors */
+    if (ret != IM_STATUS_SUCCESS) {
+        SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "error!, %s\n", imStrError((IM_STATUS)ret));
+        if (src_handle)
+            releasebuffer_handle(src_handle);
+        if (dst_handle)
+            releasebuffer_handle(dst_handle);
+    }
+
+    rga_buffer = viddata->rga_buffers[viddata->rga_buffer_index];
+    fb_info = KMSDRM_FBFromBO(_this, rga_buffer);
+
     if (!fb_info) {
-        SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "Could not get a framebuffer");
+        SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "Could not get a framebuffer: no fb_info");
         return 0;
     }
+
+    viddata->rga_buffer_index = (viddata->rga_buffer_index + 1) % RGA_BUFFERS_MAX;
 
     if (!windata->bo) {
         /* On the first swap, immediately present the new front buffer. Before

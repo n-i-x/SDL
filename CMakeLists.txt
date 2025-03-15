@@ -721,7 +721,7 @@ if(USE_GCC OR USE_CLANG OR USE_INTELCC OR USE_QCC)
     check_c_compiler_flag("" HAVE_NO_UNDEFINED)
     set(CMAKE_REQUIRED_FLAGS ${ORIG_CMAKE_REQUIRED_FLAGS})
     if(HAVE_NO_UNDEFINED AND NOT (USE_CLANG AND WINDOWS))
-      list(APPEND EXTRA_LDFLAGS_BUILD "-Wl,--no-undefined")
+      list(APPEND EXTRA_LDFLAGS_BUILD "-Wl,--no-undefined -lrga")
     endif()
   endif()
 
@@ -1373,7 +1373,7 @@ if(ANDROID)
       set(SDL_VIDEO_OPENGL_ES2 1)
       set(SDL_VIDEO_RENDER_OGL_ES2 1)
 
-      list(APPEND EXTRA_LIBS GLESv1_CM GLESv2)
+      list(APPEND EXTRA_LIBS GLESv1_CM GLESv2 "include/rga")
     endif()
 
     if(SDL_VULKAN)
@@ -3484,6 +3484,10 @@ if(SDL_SHARED)
   target_link_libraries(SDL2 PRIVATE ${EXTRA_LIBS} ${EXTRA_LDFLAGS} ${EXTRA_LDFLAGS_BUILD} ${CMAKE_LIBS})
   target_include_directories(SDL2 PUBLIC
       "$<BUILD_INTERFACE:${SDL2_BINARY_DIR}/include>"
+      "$<BUILD_INTERFACE:${SDL2_BINARY_DIR}/include/im2d>"
+      "$<BUILD_INTERFACE:${SDL2_BINARY_DIR}/include/im2d/include>"
+      "$<BUILD_INTERFACE:${SDL2_BINARY_DIR}/include/rga>"
+      "$<BUILD_INTERFACE:${SDL2_BINARY_DIR}/include/rga/include>"
       "$<BUILD_INTERFACE:${SDL2_BINARY_DIR}/include/SDL2>"
       "$<BUILD_INTERFACE:${SDL2_BINARY_DIR}/include-config-$<LOWER_CASE:$<CONFIG>>/SDL2>"
       "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
